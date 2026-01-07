@@ -2227,6 +2227,8 @@ L_1_[41][L_1_[2]({
 	"BackgroundTransparen";
 	"cy"
 })] = 0
+L_1_[41].ImageColor3 = Color3.fromRGB(255, 255, 255)
+L_1_[41].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 L_1_[41]["Parent"] = L_1_[87]
 L_1_[82] = Instance["new"]("UICorner")
 L_1_[82]["CornerRadius"] = UDim["new"](.5, 0)
@@ -2869,21 +2871,31 @@ task["spawn"](function()
 							if L_1_[4]["Alive"](L_237_[1]) and L_237_[1]["Name"] == L_234_[3] then
 								L_234_[2] = true
 								repeat
-								task["wait"](Sec)
+    task.wait(Sec)
 
-								-- AUTO EQUIP (PUTS WEAPON BACK EVERY LOOP)
-								local weapon = _G.SelectMelee or _G.SelectSword or _G.SelectGun
-								if weapon then
-									EquipWeapon(weapon)
-								end
+    -- FORCE EQUIP WEAPON (NO EquipWeapon FUNCTION)
+    local char = plr.Character
+    local bp = plr.Backpack
+    local weaponName = _G.SelectMelee or _G.SelectSword or _G.SelectGun
 
-								_tp(L_237_[1]["HumanoidRootPart"]["CFrame"] * CFrame["new"](0, 10, 0))
-								L_1_[4]["Kill"](L_237_[1], _G["Level"])
+    if weaponName and char and bp then
+        local currentTool = char:FindFirstChildOfClass("Tool")
+        if not currentTool or currentTool.Name ~= weaponName then
+            local tool = bp:FindFirstChild(weaponName)
+            if tool then
+                char.Humanoid:EquipTool(tool)
+            end
+        end
+    end
 
-								until not _G["Level"]
-								or not L_237_[1]["Parent"]
-								or L_237_[1]["Humanoid"]["Health"] <= 0
-								or not L_229_[1]["Visible"]
+    _tp(L_237_[1].HumanoidRootPart.CFrame * CFrame.new(0, 10, 0))
+    L_1_[4]["Kill"](L_237_[1], _G["Level"])
+
+until not _G["Level"]
+or not L_237_[1].Parent
+or L_237_[1].Humanoid.Health <= 0
+or not L_229_[1].Visible
+
 
 								break
 							end
