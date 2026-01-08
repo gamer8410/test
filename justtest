@@ -23,12 +23,16 @@ _G.AutoFarm = false
 _G.WeaponType = "Melee" -- "Melee" | "Sword"
 
 --// LOAD REDZ HUB UI (IMPORTANT: DO NOT ASSIGN RETURN)
+--// LOAD REDZ HUB UI (CORRECT GLOBAL)
 loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/TBoyRoblox727/Ui/refs/heads/main/UiRedzHub.lua"
 ))()
 
--- Menu is created globally by the UI
-local Window = Menu:CreateWindow({
+-- UiRedzHub creates a GLOBAL called RedzHub (not Menu)
+local UI = getgenv().RedzHub or _G.RedzHub or shared.RedzHub
+assert(UI, "RedzHub UI failed to load")
+
+local Window = UI:CreateWindow({
     Title = "Clean Farm",
     SubTitle = "Minimal"
 })
