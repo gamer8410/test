@@ -1,43 +1,41 @@
 --[[
-  MINIMAL CLEAN FARM SCRIPT
-  UI: Redz Hub (UiRedzHub.lua)
-  ONLY:
-   - Auto Farm Toggle
-   - Weapon Selector
-  Nothing else.
+  MINIMAL CLEAN FARM SCRIPT (FIXED)
+  UI: UiRedzHub.lua (TBoyRoblox727)
+
+  FEATURES:
+   - Auto Farm toggle
+   - Weapon Type dropdown (Melee / Sword)
+   - Auto equip selected type
+   - Attack nearest enemy
+
+  NOTHING ELSE.
 ]]
 
 --// SERVICES
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local hrp = character:WaitForChild("HumanoidRootPart")
 
---// REMOTE
-local CommF = ReplicatedStorage.Remotes.CommF_
-
---// STATE
+--// GLOBAL STATE
 _G.AutoFarm = false
-_G.SelectedWeapon = nil
+_G.WeaponType = "Melee" -- "Melee" | "Sword"
 
---// REDZ HUB UI (WORKING COMMUNITY VERSION)
-local RedzUI = loadstring(game:HttpGet(
+--// LOAD REDZ HUB UI (IMPORTANT: DO NOT ASSIGN RETURN)
+loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/TBoyRoblox727/Ui/refs/heads/main/UiRedzHub.lua"
 ))()
 
-local Window = RedzUI:MakeWindow({
+-- Menu is created globally by the UI
+local Window = Menu:CreateWindow({
     Title = "Clean Farm",
-    SubTitle = "Minimal",
-    SaveFolder = "CleanFarm"
+    SubTitle = "Minimal"
 })
 
-local FarmTab = Window:MakeTab({Name = "Farm"})
+local FarmTab = Window:CreateTab("Farm")
 
-FarmTab:AddToggle({
+FarmTab:CreateToggle({
     Name = "Auto Farm",
     Default = false,
     Callback = function(v)
@@ -45,73 +43,72 @@ FarmTab:AddToggle({
     end
 })
 
-local WeaponDropdown = FarmTab:AddDropdown({
-    Name = "Weapon",
-    Options = {"(refreshing...)"},
+FarmTab:CreateDropdown({
+    Name = "Weapon Type",
+    Options = {"Melee", "Sword"},
+    Default = "Melee",
     Callback = function(v)
-        _G.SelectedWeapon = v
-    end
-})
-        _G.SelectedWeapon = v
+        _G.WeaponType = v
     end
 })
 
---// WEAPON HANDLING
-local function refreshWeapons()
-    local list = {}
-    for _,tool in pairs(player.Backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            table.insert(list, tool.Name)
+--// WEAPON HELPERS
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+local function equipWeaponByType()
+    local character = getCharacter()
+    local backpack = player.Backpack
+
+    -- already holding correct type
+    for _,tool in pairs(character:GetChildren()) do
+        if tool:IsA("Tool") and tool.ToolTip == _G.WeaponType then
+            return
         end
     end
-    if #list == 0 then
-        table.insert(list, "(no weapons)")
-    end
-    if WeaponDropdown and WeaponDropdown.SetOptions then
-        WeaponDropdown:SetOptions(list)
-    end
-end
-    end
-    FarmTab:UpdateDropdown("Weapon", list)
-end
 
-local function equipWeapon()
-    if not _G.SelectedWeapon then return end
-    local tool = player.Backpack:FindFirstChild(_G.SelectedWeapon)
-        or character:FindFirstChild(_G.SelectedWeapon)
-    if tool and tool.Parent ~= character then
-        tool.Parent = character
+    -- equip from backpack
+    for _,tool in pairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool.ToolTip == _G.WeaponType then
+            tool.Parent = character
+            return
+        end
     end
 end
 
-player.Backpack.ChildAdded:Connect(refreshWeapons)
-player.Backpack.ChildRemoved:Connect(refreshWeapons)
-refreshWeapons()
+--// FIND NEAREST ENEMY
+local function getNearestEnemy(hrp)
+    local closest, dist = nil, math.huge
+    for _,mob in pairs(Workspace.Enemies:GetChildren()) do
+        if mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") then
+            if mob.Humanoid.Health > 0 then
+                local d = (mob.HumanoidRootPart.Position - hrp.Position).Magnitude
+                if d < dist then
+                    closest = mob
+                    dist = d
+                end
+            end
+        end
+    end
+    return closest
+end
 
---// BASIC FARM LOOP (NO QUEST LOGIC)
+--// MAIN LOOP
 RunService.Heartbeat:Connect(function()
     if not _G.AutoFarm then return end
 
     local character = player.Character
     if not character then return end
+
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    equipWeapon()
+    equipWeaponByType()
 
-    -- DEBUG: move only if enemy exists
-    local closest, dist = nil, math.huge
-    for _,e in pairs(Workspace.Enemies:GetChildren()) do
-        if e:FindFirstChild("HumanoidRootPart") and e:FindFirstChild("Humanoid") and e.Humanoid.Health > 0 then
-            local d = (e.HumanoidRootPart.Position - hrp.Position).Magnitude
-            if d < dist then
-                closest, dist = e, d
-            end
-        end
-    end
-
-    if closest then
-        hrp.CFrame = closest.HumanoidRootPart.CFrame * CFrame.new(0, 8, 0)
+    local enemy = getNearestEnemy(hrp)
+    if enemy then
+        hrp.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 8, 0)
     end
 end)
 
