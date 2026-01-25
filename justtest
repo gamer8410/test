@@ -20,11 +20,32 @@ local MobileButton = Minimizer:CreateMobileMinimizer({
 })
 
 -- Initialize Global Variables
-_G.SelectWeapon = "Melee"
+local ChooseWeapon = "Melee"
 _G.Fast_Delay = 1e-9
-Sea1 = false
-Sea2 = false
-Sea3 = false
+local Sea1 = false
+local Sea2 = false
+local Sea3 = false
+
+--body movers
+local BV, BG = nil, nil
+
+--variables
+--// FLAGS
+local AutoFarm = false
+local BringMob = true
+local FastAttack = true
+
+--// FARM SETTINGS
+
+local FarmRange = 15
+
+--// QUEST DATA (USED EVERYWHERE)
+local NameQuest = ""
+local QuestLv = 1
+local NameMon = ""
+local CFrameQ = nil
+local CFrameMon = nil
+local MonFarm = ""
 
 -- Check Game Sea
 local PlaceId = game.PlaceId
@@ -45,8 +66,8 @@ game:GetService("Players").LocalPlayer.Idled:connect(function()
 end)
 
 -- Create Tabs
-local HomeTab = Window:MakeTab({Title = "Home", Icon = "Home"})
-local MainTab = Window:MakeTab({Title = "Farming", Icon = "Pickaxe"})
+local HomeTab = Window:MakeTab({Title = "Home", Icon = "MessageCircle"})
+local MainTab = Window:MakeTab({Title = "Farming", Icon = "Home"})
 local SeaTab = Window:MakeTab({Title = "Sea Event", Icon = "Waves"})
 local ItemTab = Window:MakeTab({Title = "Items", Icon = "Package"})
 local SettingTab = Window:MakeTab({Title = "Settings", Icon = "Settings"})
@@ -60,7 +81,6 @@ local RaidTab = Window:MakeTab({Title = "Raid", Icon = "Zap"})
 local RaceTab = Window:MakeTab({Title = "Race", Icon = "Flag"})
 local ShopTab = Window:MakeTab({Title = "Shop", Icon = "ShoppingCart"})
 local MiscTab = Window:MakeTab({Title = "Misc", Icon = "MoreHorizontal"})
-local MonFarm 
 
 function CheckLevel()
     local Level = game:GetService("Players").LocalPlayer.Data.Level.Value;
@@ -756,7 +776,7 @@ MainTab:AddToggle({
     Default = false,
     Flag = "auto_level",
     Callback = function(Value)
-        _G.AutoLevel = Value
+        AutoLevel = Value
         if Value == false then
             wait()
             -- Stop farming logic
@@ -2378,13 +2398,229 @@ MiscTab:AddToggle({
     end
 })
 
+local function GetChar()
+    return LP.Character
+end
+
+local function GetHRP()
+    local char = GetChar()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+--// TWEEN SYSTEM
+local TweenService = game:GetService("TweenService")
+local TweenSpeed = 300
+local currentTween = nil
+
+local function Tween(targetCFrame)
+    local hrp = GetHRP()
+    if not hrp then return end
+    
+    -- Cancel existing tween
+    if currentTween then
+        currentTween:Cancel()
+    end
+    
+    local distance = (targetCFrame.Position - hrp.Position).Magnitude
+    local duration = distance / TweenSpeed
+    
+    local tweenInfo = TweenInfo.new(
+        duration,
+        Enum.EasingStyle.Linear,
+        Enum.EasingDirection.InOut
+    )
+    
+    currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+    currentTween:Play()
+    
+    return currentTween
+end
+
+local function StopTween()
+    if currentTween then
+        currentTween:Cancel()
+        currentTween = nil
+    end
+end
+
+local function EquipWeapon()
+    local char = GetChar()
+    if not char then return nil end
+    
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool.ToolTip ~= WeaponType then
+            tool.Parent = LP.Backpack
+        end
+    end
+    
+    for _, tool in pairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool.ToolTip == WeaponType then
+            return tool
+        end
+    end
+    
+    for _, tool in pairs(LP.Backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool.ToolTip == WeaponType then
+            tool.Parent = char
+            return tool
+        end
+    end
+    
+    for _, tool in pairs(LP.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            tool.Parent = char
+            return tool
+        end
+    end
+    
+    return nil
+end
+
+local function GetNearestEnemy()
+    if not workspace:FindFirstChild("Enemies") then return nil end
+    
+    local hrp = GetHRP()
+    if not hrp then return nil end
+    
+    local nearest, minDist = nil, math.huge
+    
+    for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+        local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
+        local enemyHum = enemy:FindFirstChild("Humanoid")
+        
+        if enemyHRP and enemyHum and enemyHum.Health > 0 then
+            local dist = (enemyHRP.Position - hrp.Position).Magnitude
+            if dist <= FarmRange and dist < minDist then
+                minDist = dist
+                nearest = enemy
+            end
+        end
+    end
+    
+    return nearest
+end
+
+local function ExpandHitbox(enemy)
+    if not enemy then return end
+    local hrp = enemy:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.Size = Vector3.new(20, 20, 20)
+        hrp.Transparency = 1
+        hrp.CanCollide = false
+    end
+end
+
+local function AutoHaki()
+    if not game:GetService("Players").LocalPlayer.Character:FindFirstChild("HasBuso") then
+        game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("Buso")
+    end
+end
 
 
--- Final Notification
-Window:Notify({
-    Title = "Banana Cat Hub",
-    Content = "Script loaded successfully!\nConverted to Redz UI by HNC",
-    Duration = 5,
-    Image = "rbxassetid://10734953451"
-})
+local attackCooldown = 0
+local function Attack(enemy)
+    if not enemy or tick() - attackCooldown < 0.1 then return end
+    attackCooldown = tick()
+    
+    ExpandHitbox(enemy)
+    
+    pcall(function()
+        local net = ReplicatedStorage:FindFirstChild("Modules")
+        if not net then return end
+        net = net:FindFirstChild("Net")
+        if not net then return end
+        
+        local regAttack = net:FindFirstChild("RE/RegisterAttack")
+        local regHit = net:FindFirstChild("RE/RegisterHit")
+        
+        if regAttack then
+            regAttack:FireServer(0.4)
+        end
+        
+        if regHit then
+            local bodyParts = {"HumanoidRootPart", "Torso", "Head", "RightUpperArm", "LeftUpperArm"}
+            for _, partName in pairs(bodyParts) do
+                local part = enemy:FindFirstChild(partName)
+                if part then
+                    regHit:FireServer(part, {}, tostring(math.random(100000, 999999)))
+                    break
+                end
+            end
+        end
+    end)
+end
 
+local function EnableFly()
+    local hrp = GetHRP()
+    if not hrp then return end
+    
+    if not BV then
+        BV = Instance.new("BodyVelocity")
+        BV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        BV.Velocity = Vector3.zero
+        BV.Parent = hrp
+    end
+    
+    if not BG then
+        BG = Instance.new("BodyGyro")
+        BG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        BG.P = 9e4
+        BG.Parent = hrp
+    end
+end
+
+local function DisableFly()
+    if BV then BV:Destroy(); BV = nil end
+    if BG then BG:Destroy(); BG = nil end
+end
+
+local function GetQuestStatus()
+    local questData = LP.PlayerGui:FindFirstChild("Main")
+    if questData then
+        questData = questData:FindFirstChild("Quest")
+        if questData and questData.Visible then
+            return true
+        end
+    end
+    return false
+end
+
+local function HasQuest()
+    local mainGui = LP.PlayerGui:FindFirstChild("Main")
+    if mainGui then
+        local questFrame = mainGui:FindFirstChild("Quest")
+        if questFrame and questFrame.Visible then
+            return true
+        end
+    end
+    return false
+end
+
+local function AcceptQuest()
+    if HasQuest() then
+        return  -- Quest already active, skip
+    end
+    
+    CheckLevel()
+    local args = {
+        "StartQuest",
+        NameQuest,
+        QuestLv
+    }
+    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
+end
+
+
+local function GetLevelEnemy()
+    if not workspace:FindFirstChild("Enemies") then return nil end
+    
+    for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+        if enemy.Name == NameMon then
+            local enemyHum = enemy:FindFirstChild("Humanoid")
+            if enemyHum and enemyHum.Health > 0 then
+                return enemy
+            end
+        end
+    end
+    return nil
+end
